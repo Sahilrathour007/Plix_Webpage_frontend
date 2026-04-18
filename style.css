@@ -716,3 +716,33 @@ button { cursor: pointer; font-family: inherit; }
   .product-grid { grid-template-columns: 1fr; }
   .hero-stats { flex-wrap: wrap; }
 }
+
+/* ── NAV RIGHT GROUP ────────────────────────────────────────── */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── LOGIN BUTTON ───────────────────────────────────────────── */
+.login-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  border: 1px solid var(--border-med);
+  border-radius: var(--radius-pill);
+  background: white;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 160px;
+}
+.login-btn:hover {
+  border-color: var(--green);
+  box-shadow: var(--shadow-sm);
+}
