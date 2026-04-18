@@ -1,5 +1,14 @@
 // ── Config ─────────────────────────────────────────────────────
-const BACKEND_URL = 'https://plix-webapge-backend.onrender.com' // ← your Render URL
+const BACKEND_URL = 'https://plix-webapge-backend.onrender.com'
+
+// ── Category mapping — scalable, driven by products.js arrays ──
+// Never hardcode IDs. Derives top-level category from which array
+// the product lives in. Add new products to products.js only.
+function getTopLevelCategory(productId) {
+  if (NUTRITION_PRODUCTS.find(p => p.id === productId)) return 'nutrition'
+  if (SKINCARE_PRODUCTS.find(p => p.id === productId))  return 'skincare'
+  return 'nutrition'
+}
 
 // ── State ──────────────────────────────────────────────────────
 let cart = {};
@@ -150,9 +159,6 @@ document.getElementById('cartToggle').addEventListener('click', () => {
 
 // ── Order modal ────────────────────────────────────────────────
 function openOrderModal() {
-  // Gate: user must be logged in
-  const session = window.supabase?._session || null
-  // We'll check properly via getSession (async) before allowing checkout
   window.supabase?.auth.getSession().then(({ data }) => {
     if (!data?.session) {
       closeCart()
@@ -189,23 +195,20 @@ function closeOrderModal() {
   document.body.classList.remove('no-scroll');
 }
 
-// ── Submit Order — now actually hits your backend ──────────────
+// ── Submit Order ───────────────────────────────────────────────
 async function submitOrder() {
   const name  = document.getElementById('iName').value.trim();
   const phone = document.getElementById('iPhone').value.trim();
   const addr  = document.getElementById('iAddr').value.trim();
   const email = document.getElementById('iEmail').value.trim();
 
-  // Validate required fields
   if (!name)  { document.getElementById('iName').focus();  return; }
   if (!phone) { document.getElementById('iPhone').focus(); return; }
   if (!addr)  { document.getElementById('iAddr').focus();  return; }
 
-  // Cart must not be empty
   const items = Object.values(cart);
   if (items.length === 0) return;
 
-  // ── Get Supabase session token ─────────────────────────────
   const { data: sessionData } = await window.supabase.auth.getSession()
   const session = sessionData?.session
 
@@ -218,19 +221,14 @@ async function submitOrder() {
 
   const accessToken = session.access_token
 
-  // ── Disable button, show loading ───────────────────────────
   const btn = document.querySelector('#orderForm .checkout-btn')
   const originalText = btn.textContent
   btn.textContent = 'Placing order...'
   btn.disabled = true
 
-  // ── Build order payload — one request per cart item ────────
-  // Your backend processes one product per order. If cart has
-  // multiple items, we send them sequentially.
   const total = items.reduce((s, p) => s + p.price, 0)
 
-  // Collect UTM params from URL (if any)
-  const urlParams   = new URLSearchParams(window.location.search)
+  const urlParams    = new URLSearchParams(window.location.search)
   const utm_source   = urlParams.get('utm_source')   || null
   const utm_medium   = urlParams.get('utm_medium')   || null
   const utm_campaign = urlParams.get('utm_campaign') || null
@@ -241,25 +239,32 @@ async function submitOrder() {
 
   for (const product of items) {
     const payload = {
-      // Product
-      product_id:           product.id,
-      product_name:         product.name,
-      product_category:     product.category,
-      product_sub_category: product.subcategory || null,
+      // ── Product ───────────────────────────────────────────────
+      product_id:   product.id,
+      product_name: product.name,
 
-      // Pricing
-      order_value:    product.price,
-      mrp:            product.mrp,
+      // 'nutrition' | 'skincare' — derived from which array product
+      // lives in. Matches DB check constraint. Scales automatically
+      // when new products are added to products.js.
+      product_category: getTopLevelCategory(product.id),
+
+      // Granular subcategory from products.js category field:
+      // 'protein' | 'spreads' | 'wellness' | 'facewash' | 'serum' | 'sunscreen'
+      product_sub_category: product.category,
+
+      // ── Pricing ───────────────────────────────────────────────
+      order_value:     product.price,
+      mrp:             product.mrp,
       discount_amount: product.mrp - product.price,
-      discount_code:  null,
+      discount_code:   null,
 
-      // Customer
+      // ── Customer ──────────────────────────────────────────────
       customer_name:    name,
       customer_phone:   phone,
       customer_email:   email || session.user.email,
       delivery_address: addr,
 
-      // Attribution
+      // ── Attribution ───────────────────────────────────────────
       utm_source,
       utm_medium,
       utm_campaign,
@@ -268,7 +273,7 @@ async function submitOrder() {
       last_utm:            null,
       attr_quality:        utm_source ? 'utm_captured' : 'unattributed',
 
-      // Session
+      // ── Session ───────────────────────────────────────────────
       session_id: null,
       device_id:  null,
     }
@@ -300,7 +305,6 @@ async function submitOrder() {
     }
   }
 
-  // ── Re-enable button ───────────────────────────────────────
   btn.textContent = originalText
   btn.disabled    = false
 
@@ -309,14 +313,12 @@ async function submitOrder() {
     return
   }
 
-  // ── Show success ───────────────────────────────────────────
   document.getElementById('successMsg').textContent =
     `Hi ${name}! Your order (${lastOrderRef || 'received'}) worth ₹${total.toLocaleString('en-IN')} has been placed. We'll call you at ${phone} to confirm delivery.`
 
-  document.getElementById('orderForm').style.display  = 'none'
+  document.getElementById('orderForm').style.display   = 'none'
   document.getElementById('orderSuccess').style.display = 'flex'
 
-  // Clear cart
   cart = {}
   updateCartUI()
   renderNut(nutFilter)
