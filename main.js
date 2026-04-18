@@ -1,3 +1,6 @@
+// ── Config ─────────────────────────────────────────────────────
+const BACKEND_URL = 'https://plix-webapge-backend.onrender.com' // ← your Render URL
+
 // ── State ──────────────────────────────────────────────────────
 let cart = {};
 let nutFilter = 'all';
@@ -85,7 +88,6 @@ function toggleCart(id, section) {
 
   updateCartUI();
 
-  // Update button
   const btn = document.getElementById('btn-' + id);
   if (btn) {
     btn.classList.toggle('add-btn--added', !!cart[id]);
@@ -148,8 +150,22 @@ document.getElementById('cartToggle').addEventListener('click', () => {
 
 // ── Order modal ────────────────────────────────────────────────
 function openOrderModal() {
+  // Gate: user must be logged in
+  const session = window.supabase?._session || null
+  // We'll check properly via getSession (async) before allowing checkout
+  window.supabase?.auth.getSession().then(({ data }) => {
+    if (!data?.session) {
+      closeCart()
+      openLoginModal()
+      alert('Please sign in first to place an order.')
+      return
+    }
+    _openOrderModal()
+  })
+}
+
+function _openOrderModal() {
   closeCart();
-  // Populate order summary
   const items = Object.values(cart);
   let total = 0;
   const summaryHTML = items.map(p => {
@@ -173,28 +189,138 @@ function closeOrderModal() {
   document.body.classList.remove('no-scroll');
 }
 
-function submitOrder() {
-  const name = document.getElementById('iName').value.trim();
+// ── Submit Order — now actually hits your backend ──────────────
+async function submitOrder() {
+  const name  = document.getElementById('iName').value.trim();
   const phone = document.getElementById('iPhone').value.trim();
-  const addr = document.getElementById('iAddr').value.trim();
-  if (!name || !phone || !addr) {
-    if (!name) document.getElementById('iName').focus();
-    else if (!phone) document.getElementById('iPhone').focus();
-    else document.getElementById('iAddr').focus();
-    return;
-  }
-  const items = Object.values(cart).map(p => p.name).join(', ');
-  const total = Object.values(cart).reduce((s, p) => s + p.price, 0);
-  document.getElementById('successMsg').textContent =
-    `Hi ${name}! Your order for ${items} worth ₹${total.toLocaleString('en-IN')} has been received. We'll call you at ${phone} to confirm delivery.`;
-  document.getElementById('orderForm').style.display = 'none';
-  document.getElementById('orderSuccess').style.display = 'flex';
+  const addr  = document.getElementById('iAddr').value.trim();
+  const email = document.getElementById('iEmail').value.trim();
 
-  // Clear cart after order
-  cart = {};
-  updateCartUI();
-  renderNut(nutFilter);
-  renderSkin(skinFilter);
+  // Validate required fields
+  if (!name)  { document.getElementById('iName').focus();  return; }
+  if (!phone) { document.getElementById('iPhone').focus(); return; }
+  if (!addr)  { document.getElementById('iAddr').focus();  return; }
+
+  // Cart must not be empty
+  const items = Object.values(cart);
+  if (items.length === 0) return;
+
+  // ── Get Supabase session token ─────────────────────────────
+  const { data: sessionData } = await window.supabase.auth.getSession()
+  const session = sessionData?.session
+
+  if (!session) {
+    alert('Your session expired. Please sign in again.')
+    closeOrderModal()
+    openLoginModal()
+    return
+  }
+
+  const accessToken = session.access_token
+
+  // ── Disable button, show loading ───────────────────────────
+  const btn = document.querySelector('#orderForm .checkout-btn')
+  const originalText = btn.textContent
+  btn.textContent = 'Placing order...'
+  btn.disabled = true
+
+  // ── Build order payload — one request per cart item ────────
+  // Your backend processes one product per order. If cart has
+  // multiple items, we send them sequentially.
+  const total = items.reduce((s, p) => s + p.price, 0)
+
+  // Collect UTM params from URL (if any)
+  const urlParams   = new URLSearchParams(window.location.search)
+  const utm_source   = urlParams.get('utm_source')   || null
+  const utm_medium   = urlParams.get('utm_medium')   || null
+  const utm_campaign = urlParams.get('utm_campaign') || null
+  const utm_category = urlParams.get('utm_category') || null
+
+  let lastOrderRef = null
+  let allSuccess   = true
+
+  for (const product of items) {
+    const payload = {
+      // Product
+      product_id:           product.id,
+      product_name:         product.name,
+      product_category:     product.category,
+      product_sub_category: product.subcategory || null,
+
+      // Pricing
+      order_value:    product.price,
+      mrp:            product.mrp,
+      discount_amount: product.mrp - product.price,
+      discount_code:  null,
+
+      // Customer
+      customer_name:    name,
+      customer_phone:   phone,
+      customer_email:   email || session.user.email,
+      delivery_address: addr,
+
+      // Attribution
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_category,
+      utm_click_timestamp: null,
+      last_utm:            null,
+      attr_quality:        utm_source ? 'utm_captured' : 'unattributed',
+
+      // Session
+      session_id: null,
+      device_id:  null,
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error('[ORDER]', product.name, res.status, err)
+        allSuccess = false
+        continue
+      }
+
+      const data = await res.json()
+      lastOrderRef = data.order_ref
+      console.log('[ORDER] Placed:', data.order_ref, 'for', product.name)
+
+    } catch (err) {
+      console.error('[ORDER] Network error:', err.message)
+      allSuccess = false
+    }
+  }
+
+  // ── Re-enable button ───────────────────────────────────────
+  btn.textContent = originalText
+  btn.disabled    = false
+
+  if (!allSuccess) {
+    alert('Some items failed to place. Please try again or contact support.')
+    return
+  }
+
+  // ── Show success ───────────────────────────────────────────
+  document.getElementById('successMsg').textContent =
+    `Hi ${name}! Your order (${lastOrderRef || 'received'}) worth ₹${total.toLocaleString('en-IN')} has been placed. We'll call you at ${phone} to confirm delivery.`
+
+  document.getElementById('orderForm').style.display  = 'none'
+  document.getElementById('orderSuccess').style.display = 'flex'
+
+  // Clear cart
+  cart = {}
+  updateCartUI()
+  renderNut(nutFilter)
+  renderSkin(skinFilter)
 }
 
 // ── Nav scroll effect ──────────────────────────────────────────
@@ -233,7 +359,6 @@ function resetAuthForm() {
   if (input) { input.value = ''; input.style.borderColor = '' }
 }
 
-// Close login modal when clicking overlay background
 document.getElementById('loginOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeLoginModal()
 })
