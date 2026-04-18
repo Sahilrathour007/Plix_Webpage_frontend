@@ -3,8 +3,24 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 const supabase = createClient(
   'https://jjuzkjymdiwzaiqysobo.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqdXpranltZGl3emFpcXlzb2JvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0OTE3MjEsImV4cCI6MjA5MjA2NzcyMX0.RlQHLgQeZr1J_iduT1xgKTMfDtxvToCbdneKWcbnoLY'   // ← Supabase → Settings → API Keys → anon public
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqdXpranltZGl3emFpcXlzb2JvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0OTE3MjEsImV4cCI6MjA5MjA2NzcyMX0.RlQHLgQeZr1J_iduT1xgKTMfDtxvToCbdneKWcbnoLY'
 )
+
+// ── Resolve correct redirect URL (GitHub Pages or localhost) ───
+function getRedirectURL() {
+  const { hostname, origin, pathname } = window.location
+
+  // GitHub Pages: redirect to the repo root page
+  if (hostname.includes('github.io')) {
+    // pathname is like /Plix_Webpage_frontend/index.html
+    // We want just the base: /Plix_Webpage_frontend/
+    const base = pathname.split('/').slice(0, 2).join('/') + '/'
+    return `${origin}${base}`
+  }
+
+  // Local dev (Live Server, localhost, etc.)
+  return origin + '/'
+}
 
 // ── Send magic link ────────────────────────────────────────────
 window.sendMagicLink = async function () {
@@ -23,7 +39,7 @@ window.sendMagicLink = async function () {
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: window.location.href }
+    options: { emailRedirectTo: getRedirectURL() }
   })
 
   if (error) {
@@ -33,7 +49,6 @@ window.sendMagicLink = async function () {
     return
   }
 
-  // Show success state — store email to display it
   document.getElementById('sentToEmail').textContent = email
   document.getElementById('authFormInner').style.display = 'none'
   document.getElementById('authSuccess').style.display  = 'flex'
@@ -78,7 +93,6 @@ window.addEventListener('load', async () => {
   const { data: { user } } = await supabase.auth.getUser()
   updateLoginUI(user)
 
-  // Fires when magic link is clicked and user lands back on the page
   supabase.auth.onAuthStateChange((_event, session) => {
     updateLoginUI(session?.user ?? null)
     if (session?.user) closeLoginModal()
