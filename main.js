@@ -208,3 +208,36 @@ window.addEventListener('scroll', () => {
 renderNut('all');
 renderSkin('all');
 updateCartUI();
+
+// ── Login Modal ────────────────────────────────────────────────
+function openLoginModal() {
+  resetAuthForm()
+  document.getElementById('loginOverlay').classList.add('open')
+  document.body.classList.add('no-scroll')
+  setTimeout(() => document.getElementById('authEmail')?.focus(), 120)
+}
+
+function closeLoginModal() {
+  document.getElementById('loginOverlay').classList.remove('open')
+  document.body.classList.remove('no-scroll')
+}
+
+function resetAuthForm() {
+  const form    = document.getElementById('authFormInner')
+  const success = document.getElementById('authSuccess')
+  const btn     = document.getElementById('authSubmitBtn')
+  const input   = document.getElementById('authEmail')
+  if (form)    form.style.display    = 'block'
+  if (success) success.style.display = 'none'
+  if (btn)   { btn.textContent = 'Send Login Link →'; btn.disabled = false }
+  if (input) { input.value = ''; input.style.borderColor = '' }
+}
+
+// Close login modal when clicking overlay background
+document.getElementById('loginOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeLoginModal()
+})
+
+window.openLoginModal  = openLoginModal
+window.closeLoginModal = closeLoginModal
+window.resetAuthForm   = resetAuthForm
