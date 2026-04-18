@@ -3,7 +3,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 const supabase = createClient(
   'https://jjuzkjymdiwzaiqysobo.supabase.co',
-  'YOUR_ANON_KEY_HERE'   // ← Supabase → Settings → API Keys → anon public
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqdXpranltZGl3emFpcXlzb2JvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0OTE3MjEsImV4cCI6MjA5MjA2NzcyMX0.RlQHLgQeZr1J_iduT1xgKTMfDtxvToCbdneKWcbnoLY'   // ← Supabase → Settings → API Keys → anon public
 )
 
 // ── Send magic link ────────────────────────────────────────────
