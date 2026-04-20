@@ -1,9 +1,31 @@
 // ── Config ─────────────────────────────────────────────────────
 const BACKEND_URL = 'https://plix-webapge-backend.onrender.com'
 
+// ── UTM capture — run ONCE on page load, store in sessionStorage ──
+// Reading UTMs at submit time loses them if the URL changes (hash nav,
+// magic link redirect, etc.). Capture immediately and persist.
+(function captureUTMs() {
+  const params = new URLSearchParams(window.location.search)
+  const source = params.get('utm_source')
+  if (source) {
+    const utmData = {
+      utm_source:          source,
+      utm_medium:          params.get('utm_medium')   || null,
+      utm_campaign:        params.get('utm_campaign') || null,
+      utm_category:        params.get('utm_category') || null,
+      utm_click_timestamp: new Date().toISOString(),   // exact landing time
+    }
+    sessionStorage.setItem('plix_utms', JSON.stringify(utmData))
+  }
+})()
+
+function getStoredUTMs() {
+  try {
+    return JSON.parse(sessionStorage.getItem('plix_utms') || 'null')
+  } catch { return null }
+}
+
 // ── Category mapping — scalable, driven by products.js arrays ──
-// Never hardcode IDs. Derives top-level category from which array
-// the product lives in. Add new products to products.js only.
 function getTopLevelCategory(productId) {
   if (NUTRITION_PRODUCTS.find(p => p.id === productId)) return 'nutrition'
   if (SKINCARE_PRODUCTS.find(p => p.id === productId))  return 'skincare'
@@ -228,11 +250,13 @@ async function submitOrder() {
 
   const total = items.reduce((s, p) => s + p.price, 0)
 
-  const urlParams    = new URLSearchParams(window.location.search)
-  const utm_source   = urlParams.get('utm_source')   || null
-  const utm_medium   = urlParams.get('utm_medium')   || null
-  const utm_campaign = urlParams.get('utm_campaign') || null
-  const utm_category = urlParams.get('utm_category') || null
+  // Read UTMs from sessionStorage (captured on page load, not submit time)
+  const utms = getStoredUTMs()
+  const utm_source          = utms?.utm_source          || null
+  const utm_medium          = utms?.utm_medium          || null
+  const utm_campaign        = utms?.utm_campaign        || null
+  const utm_category        = utms?.utm_category        || null
+  const utm_click_timestamp = utms?.utm_click_timestamp || null
 
   let lastOrderRef = null
   let allSuccess   = true
@@ -242,14 +266,7 @@ async function submitOrder() {
       // ── Product ───────────────────────────────────────────────
       product_id:   product.id,
       product_name: product.name,
-
-      // 'nutrition' | 'skincare' — derived from which array product
-      // lives in. Matches DB check constraint. Scales automatically
-      // when new products are added to products.js.
-      product_category: getTopLevelCategory(product.id),
-
-      // Granular subcategory from products.js category field:
-      // 'protein' | 'spreads' | 'wellness' | 'facewash' | 'serum' | 'sunscreen'
+      product_category:     getTopLevelCategory(product.id),
       product_sub_category: product.category,
 
       // ── Pricing ───────────────────────────────────────────────
@@ -264,14 +281,14 @@ async function submitOrder() {
       customer_email:   email || session.user.email,
       delivery_address: addr,
 
-      // ── Attribution ───────────────────────────────────────────
+      // ── Attribution — from sessionStorage, not live URL ───────
       utm_source,
       utm_medium,
       utm_campaign,
       utm_category,
-      utm_click_timestamp: null,
-      last_utm:            null,
-      attr_quality:        utm_source ? 'utm_captured' : 'unattributed',
+      utm_click_timestamp,
+      last_utm:     null,
+      attr_quality: utm_source ? 'utm_captured' : 'unattributed',
 
       // ── Session ───────────────────────────────────────────────
       session_id: null,
