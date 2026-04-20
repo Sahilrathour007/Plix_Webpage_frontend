@@ -1,5 +1,5 @@
 // ── Config ─────────────────────────────────────────────────────
-const BACKEND_URL = 'https://plix-webapge-backend.onrender.com'
+const BACKEND_URL = 'https://plix-webapge-backend.onrender.com';
 
 // ── UTM capture — run ONCE on page load, store in sessionStorage ──
 // Reading UTMs at submit time loses them if the URL changes (hash nav,
